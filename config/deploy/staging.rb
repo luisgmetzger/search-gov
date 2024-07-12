@@ -5,6 +5,8 @@
 # Defines a single server with a list of roles and multiple properties.
 # You can define all roles on a single server, or split them:
 
+server ENV['SERVER_ADDRESS'], user: ENV['SERVER_DEPLOYMENT_USER'], roles: %w{app db web}
+
 # Configuration
 # =============
 # You can set any configuration variable like in config/deploy.rb.
@@ -13,6 +15,9 @@
 # http://capistranorb.com/documentation/getting-started/configuration/
 # Feel free to add new variables to customize your setup.
 
+set :rails_env, 'staging'
+set :aws_ssm_path, ENV['AWS_SSM_PATH']
+
 # Custom SSH Options
 # ==================
 # You may pass any option but keep in mind that net/ssh understands a limited set of options, consult the Net/SSH documentation.
@@ -20,3 +25,21 @@
 
 # Global options
 # --------------
+set :ssh_options, {
+  keys: [ENV['SSH_KEY_PATH']],
+  forward_agent: false,
+  auth_methods: %w(publickey)
+}
+
+# The server-based syntax can be used to override options:
+# ------------------------------------
+# server "staging.server.com",
+#   user: "deploy",
+#   roles: %w{web app},
+#   ssh_options: {
+#     user: "deploy", # overrides user setting above
+#     keys: [fetch(:ssh_key_path, '/default/path/to/staging_ec2_keypair.pem')],
+#     forward_agent: false,
+#     auth_methods: %w(publickey password)
+#     # password: "please use keys"
+#   }

@@ -1,40 +1,52 @@
 # config valid for current version and patch releases of Capistrano
-lock '~> 3.19.1'
+lock "~> 3.19.1"
 
-set :application,             'search-gov'
-set :branch,                  ENV.fetch('SEARCH_ENV', 'staging')
-set :default_env,             { SECRET_KEY_BASE: '1' }
-set :deploy_to,               ENV['DEPLOYMENT_PATH']
-set :format,                  :pretty
-set :puma_access_log,         "#{release_path}/log/puma.access.log"
-set :puma_bind,               'tcp://0.0.0.0:3000'
-set :puma_error_log,          "#{release_path}/log/puma.error.log"
-set :rails_env,               'production'
-set :rbenv_ruby,              '3.1.4'
-set :rbenv_type,              :user
-set :repo_url,                'https://github.com/GSA/search-gov'
-set :resque_environment_task, true
-set :resque_extra_env,        "RAILS_ROOT=#{ENV['DEPLOYMENT_PATH']}current"
-set :user,                    ENV['SERVER_DEPLOYMENT_USER']
-set :whenever_roles,          :cron
-set :workers,                 { '*' => ENV.fetch('RESQUE_WORKERS_COUNT', '5').to_i }
-set :bundle_without,          %w[development test].join(' ')
+set :application, 'search-gov'
+set :repo_url, "https://github.com/GSA/search-gov"
+set :branch, "main"
 
-append :linked_dirs,  'log', 'tmp', 'node_modules', 'public'
-append :linked_files, '.env', 'config/logindotgov.pem'
+# Set the directory to deploy to
+set :deploy_to, ENV['DEPLOYMENT_PATH']
 
-role :app,              JSON.parse(ENV.fetch('APP_SERVER_ADDRESSES', '[]')),    user: ENV['SERVER_DEPLOYMENT_USER']
-role :cron,             JSON.parse(ENV.fetch('CRON_SERVER_ADDRESSES', '[]')),   user: ENV['SERVER_DEPLOYMENT_USER']
-role :db,               JSON.parse(ENV.fetch('APP_SERVER_ADDRESSES', '[]')),    user: ENV['SERVER_DEPLOYMENT_USER']
-role :resque_scheduler, JSON.parse(ENV.fetch('RESQUE_SERVER_ADDRESSES', '[]')), user: ENV['SERVER_DEPLOYMENT_USER']
-role :resque_worker,    JSON.parse(ENV.fetch('RESQUE_SERVER_ADDRESSES', '[]')), user: ENV['SERVER_DEPLOYMENT_USER']
-role :web,              JSON.parse(ENV.fetch('APP_SERVER_ADDRESSES', '[]')),    user: ENV['SERVER_DEPLOYMENT_USER']
+# Use rbenv to manage Ruby versions
+set :rbenv_type, :user
+set :rbenv_ruby, '3.1.4'
 
-set :ssh_options, {
-  auth_methods:  %w(publickey),
-  forward_agent: false,
-  keys:          [ENV['SSH_KEY_PATH']],
-  user:          ENV['SERVER_DEPLOYMENT_USER'],
-}
+# Linked files and directories (these will be shared across releases)
+append :linked_files, 'config/database.yml', 'config/secrets.yml', '.env'
+append :linked_dirs, 'log', 'tmp/pids', 'tmp/cache', 'tmp/sockets', 'public/system', 'vendor', 'storage'
 
-after 'deploy:finished', 'resque:restart'
+# Keep only the last 5 releases to save disk space
+set :keep_releases, 5
+
+# Custom tasks for fetching environment variables from AWS SSM
+namespace :deploy do
+  task :fetch_env_vars do
+    on roles(:app) do
+      within release_path do
+        execute :bundle, :exec, :ruby, '-e', %Q{
+          require 'aws-sdk-ssm'
+          require 'rails'
+          client = Aws::SSM::Client.new(region: "#{ENV['AWS_REGION']}")
+          path = "#{ENV['AWS_SSM_PATH']}"
+          env_vars = client.get_parameters_by_path({
+            path: path,
+            with_decryption: true
+          }).parameters
+          File.open(Rails.root.join('.env'), 'w') do |file|
+            env_vars.each do |param|
+              file.puts "#{param.name.split('/').last}=#{param.value}"
+            end
+          end
+        }
+      end
+    end
+  end
+
+  before 'deploy:check:linked_files', 'deploy:fetch_env_vars'
+
+  after :finishing, 'deploy:cleanup'
+  after :finishing, 'deploy:restart'
+  after :rollback, 'deploy:restart'
+end
+
