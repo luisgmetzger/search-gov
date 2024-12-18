@@ -1,8 +1,67 @@
 require 'spec_helper'
 
 describe Sites::SitesController do
-  fixtures :users, :affiliates, :memberships, :languages
+  fixtures :users, :affiliates, :filter_settings, :filters, :languages
   before { activate_authlogic }
+
+  describe 'associations' do
+    it 'creates a filter_setting on site creation' do
+      site = Affiliate.create!(
+        display_name: "Test Site",
+        locale: "en",
+        name: "test-site",
+        filter_setting_attributes: {
+          filters_attributes: [
+            { label: "Custom Topic", enabled: true, position: 1 },
+            { label: "Custom Filter", enabled: true, position: 2 }
+          ]
+        }
+      )
+
+      expect(site.filter_setting).not_to be_nil
+
+      first_filter = site.filter_setting.filters.first
+
+      expect(first_filter.label).to eq("Custom Topic")
+      expect(first_filter.enabled).to be true
+    end
+  end
+
+  describe '#update_positions' do
+    include_context 'approved user logged in to a site'
+
+    let(:site) do
+      Affiliate.create!(
+        display_name: "Test Site",
+        locale: "en",
+        name: "test-site",
+        filter_setting_attributes: {
+          filters_attributes: [
+            { label: "Custom Topic", enabled: true, position: 1 },
+            { label: "Custom Filter", enabled: true, position: 2 }
+          ]
+        }
+      )
+    end
+
+    let(:filter1) { site.filter_setting.filters.first }
+    let(:filter2) { site.filter_setting.filters.last }
+
+    let(:user) { users.last }
+
+    before do
+      allow(controller).to receive(:current_user).and_return(user)
+    end
+
+    it 'updates the positions of the filters' do
+      put :update_positions, params: { id: site.id, positions: [filter2.id, filter1.id] }
+
+      expect(filter2.reload.position).to eq(1)
+      expect(filter1.reload.position).to eq(2)
+
+      expect(response).to have_http_status(:ok)
+    end
+  end
 
   describe 'includes the correct concerns' do
     it { expect(controller.class.ancestors.include?(Accountable)).to eq(true) }

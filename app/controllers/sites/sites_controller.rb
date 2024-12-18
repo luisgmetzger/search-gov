@@ -25,6 +25,7 @@ class Sites::SitesController < Sites::BaseController
   def create
     @site = Affiliate.new(site_params)
     @site.users << current_user
+
     if @site.save
       Emailer.new_affiliate_site(@site, current_user).deliver_now
       SiteAutodiscoverer.new(@site).run
@@ -39,6 +40,19 @@ class Sites::SitesController < Sites::BaseController
       @site.site_domains.first.domain = "http://#{@site.site_domains.first.domain}" if @site.site_domains.first.domain.present?
       render(action: :new)
     end
+  end
+
+  def update_positions
+    site = Affiliate.find(params[:id])
+    filters = site.filter_setting.filters.where(id: params[:positions].compact)
+
+    binding.pry
+
+    filters.each_with_index do |filter, index|
+      filter.update!(position: index + 1)
+    end
+
+    head :ok
   end
 
   def destroy
@@ -66,9 +80,17 @@ class Sites::SitesController < Sites::BaseController
 
   def site_params
     @site_params ||= params.require(:site).
-      permit(:display_name,
-             :locale,
-             :name,
-             { site_domains_attributes: [:domain] }).to_h
+      permit(
+        :display_name,
+        :locale,
+        :name,
+        :show_search_filter_settings,
+        { site_domains_attributes: [:domain],
+          filter_setting_attributes: [
+            :id,
+            filters_attributes: [:id, :label, :enabled, :position, :_destroy]
+          ]
+        }
+      ).to_h
   end
 end

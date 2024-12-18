@@ -1,1 +1,22 @@
 %h3 Search Filters
+%table#search-filters.table{ data: { behavior: 'sortable' } }
+  %colgroup
+    %col{ class: 'Handle' }
+    %col{ class: 'Name' }
+    %col{ class: 'Setting' }
+  %thead
+    %tr.nodrag.nodrop
+      %th{ class: 'Handle' }
+      %th Name
+      %th Setting
+  %tbody
+    - @site.filter_setting.filters.each do |filter|
+      = f.fields_for :filter_setting, filter do |ff|
+        %tr
+          %td.sortable-handle{ class: 'drag-handle' }
+            %span.fa.fa-bars
+          %td.name
+            = ff.label :label, nil, class: 'off-screen-text'
+            = ff.text_field :label, maxlength: 30
+          %td.setting
+            = switch_cell ff, :enabled

@@ -57,6 +57,10 @@ Rails.application.routes.draw do
     resources :sites do
       member { put :pin }
 
+      member do
+        put :update_positions
+      end
+
       resource :alert, only: [:edit, :create, :update]
 
       resource :api_access_key, only: [:show]
